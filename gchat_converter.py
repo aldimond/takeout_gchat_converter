@@ -10,15 +10,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TextIO
 
-from util import Group, GroupInfo, Message, MessageFile, SomePath
+from util import Group, GroupInfo, Message, MessageFile, SomePath, SummaryData
 
 
-def summarize(
+def make_summary_data(
     search_path: SomePath,
-    outfile: TextIO,
+    group_filter_strict: bool,
     group_filter: set[str],
     sender_filter: set[str],
-):
+) -> SummaryData:
     groups = list[Group]()
     usercounts = defaultdict[str, int](int)
     groups_path = search_path / "Groups"
@@ -36,11 +36,15 @@ def summarize(
         with info_path.open("r") as info_file:
             json_group: GroupInfo = json.load(info_file)
 
-        group = Group(json_group)
+        group = Group(json_group, gd.name)
 
         # Apply group and sender filters to the group
         if group_filter:
             if not group_filter.intersection(group.members.keys()):
+                continue
+            if group_filter_strict and set(group.members.keys()).difference(
+                group_filter
+            ):
                 continue
         if sender_filter:
             if not sender_filter.intersection(group.members.keys()):
@@ -76,8 +80,13 @@ def summarize(
                 group.count += 1
                 usercounts[em] += 1
 
-    # Write summary
-    print(f"Summary of {search_path}:", file=outfile)
+    return SummaryData(groups, usercounts)
+
+
+def write_summary(data: SummaryData, outfile: TextIO) -> None:
+    groups, usercounts = data
+
+    print("Summary:", file=outfile)
     print("====== CHATS ======", file=outfile)
     for group in groups:
         print(
@@ -149,6 +158,9 @@ if __name__ == "__main__":
         default=[],
     )
     argparser.add_argument(
+        "--chat-filter-exclusive", action="store_true", default=False
+    )
+    argparser.add_argument(
         "--only-senders",
         help="If set, only includes messages sent by these email addresses",
         action="store",
@@ -175,4 +187,7 @@ if __name__ == "__main__":
         else:
             outfile = sys.stdout
 
-        summarize(search_path, outfile, group_filter, sender_filter)
+        summary_data = make_summary_data(
+            search_path, args.chat_filter_exclusive, group_filter, sender_filter
+        )
+        write_summary(summary_data, outfile)

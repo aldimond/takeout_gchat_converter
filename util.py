@@ -2,7 +2,7 @@ import datetime
 import pathlib
 import zipfile
 from collections import defaultdict
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, NamedTuple, Optional, TypedDict, Union
 
 SomePath = Union[pathlib.Path, zipfile.Path]
 
@@ -35,8 +35,9 @@ class Group:
     first_msg_time: Optional[datetime.datetime]
     last_msg_time: Optional[datetime.datetime]
 
-    def __init__(self, json_group: GroupInfo):
+    def __init__(self, json_group: GroupInfo, key: str):
         super().__init__()
+        self.key = key
         self.name = json_group.get("name", "DM")
         self.members = {
             m["email"].lower(): User(m) for m in json_group["members"]
@@ -75,3 +76,8 @@ class Message:
         except Exception:
             self.created_date = None
         self.text = json_msg.get("text", "")
+
+
+class SummaryData(NamedTuple):
+    groups: list[Group]
+    usercounts: defaultdict[str, int]
