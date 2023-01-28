@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import functools
 import html
 import json
 import locale
 import logging
+import shutil
 import sys
 import zipfile
 from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TextIO
+from typing import Optional, TextIO
 
 from util import Group, GroupInfo, SomePath, SummaryData, User
 
@@ -127,19 +129,20 @@ def htmlfile(path: Path) -> Generator[TextIO, None, None]:
 
 def username_html(u: User, g: Group) -> str:
     return (
-        f'<span class="user{g.user_idxs.get(u.email, 0)}">'
+        f'<span class="user{g.user_idxs.get(u.email, 0)%10}">'
         + html.escape(u.email)
         + "</span>"
     )
 
 
 def write_html(
-    search_path: Path,
+    search_path: SomePath,
     sender_filter: set[str],
     outpath: Path,
     summary: SummaryData,
 ) -> None:
     outpath.mkdir(parents=True, exist_ok=True)
+    shutil.copy(Path(__file__).parent / "styles.css", outpath)
 
     # First let's write each of the chats...
     for i in range(len(summary.groups)):
@@ -150,12 +153,12 @@ def write_html(
         with htmlfile(outpath / f"g{i}.html") as ghtml:
             gout = functools.partial(print, file=ghtml)
 
-            gout(f"<title>Chat: {html.escape(group.name)}</title>")
+            gout(f'<h1 id="top">Chat: {html.escape(group.name)}</h1>')
             if group.first_msg_time:
                 gout(
                     f"<p>From {html.escape(str(group.first_msg_time))} to {html.escape(str(group.last_msg_time))}"
                 )
-            gout("<h1>Members")
+            gout("<h2>Members</h2>")
 
             # Print members list
             gout("<ul>")
@@ -167,13 +170,48 @@ def write_html(
                 )
             gout("</ul>")
 
+            # Find all months present
+            months = set((m.created_date.year, m.created_date.month) for m in msgs if m.created_date)
+            gout('<h2>Month Index</h2>')
+            gout('<p>')
+            for month in months:
+                gout(f'<a href="#{month[0]}-{month[1]}">')
+                gout(f'{month[0]}-{month[1]}')
+                gout('</a> ')
+
+
             # Print basic read-out of the chat
             # TODO: date links
-            gout("<h1>Messages")
+            gout("<h1>Messages</h1>")
+            prev_date: Optional[datetime.date] = None
+            prev_month: Optional[tuple[int, int]] = None
             for msg in msgs:
+                # Update date stuff
+                if msg.created_date:
+                    cur_date = msg.created_date.date()
+                    cur_month = (cur_date.year, cur_date.month)
+                    if not prev_date or cur_date != prev_date:
+                        if not prev_month or cur_month != prev_month:
+                            gout(f'<h3 id="{cur_month[0]}-{cur_month[1]}">')
+                            gout('<a href="#top">&uarr;</a>')
+                            gout(f'{cur_month[0]}-{cur_month[1]}')
+                            gout('</h3>')
+                        gout(f'<h4 id="{html.escape(str(cur_date), quote=True)}">')
+                        gout(html.escape(str(cur_date)))
+                        gout('</h4>')
+                    prev_date = cur_date
+                    prev_month = cur_month
+
                 gout("<p>")
                 gout(username_html(msg.creator, group))
-                gout(f": html.escape({msg.text})")
+                gout(": " + html.escape(msg.text))
+                gout('<br>')
+                gout('<span class="details">')
+                if msg.created_date:
+                    gout(html.escape(msg.created_date.isoformat()))
+                if msg.has_annotations:
+                    gout(' (message included images or other non-text data)')
+                gout('</span>')
 
 
 def get_search_path(in_path: Path) -> SomePath:
@@ -245,7 +283,28 @@ if __name__ == "__main__":
     sender_filter = set(s.lower() for s in args.only_senders)
 
     if args.format == "html":
-        raise Exception("not yet implemented")
+        if not args.output:
+            print("--output required for --format html", sys.stderr)
+            sys.exit(1)
+        outpath = Path(args.output)
+        if outpath.exists():
+            if outpath.is_dir() and not outpath.is_symlink():
+                s = input(f"{outpath} exists, are you sure? (y or die)")
+                if s.strip().lower() != "y":
+                    sys.exit(1)
+                shutil.rmtree(outpath)
+            else:
+                print(
+                    f"{outpath} exists, not a directory; aborting.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+        summary_data = make_summary_data(
+            search_path, args.chat_filter_exclusive, group_filter, sender_filter
+        )
+        write_html(search_path, sender_filter, outpath, summary_data)
+
     elif args.format == "summarize":
         if args.output:
             outfile: TextIO = open(args.output, "w", encoding="utf-8")

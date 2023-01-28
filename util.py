@@ -57,6 +57,7 @@ class Message:
         except Exception:
             self.created_date = None
         self.text = json_msg.get("text", "")
+        self.has_annotations = bool(json_msg.get("annotations"))
 
 
 # Converted group type
@@ -102,3 +103,4 @@ class Group:
 class SummaryData(NamedTuple):
     groups: list[Group]
     usercounts: defaultdict[str, int]
+
