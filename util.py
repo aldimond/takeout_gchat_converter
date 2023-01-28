@@ -1,7 +1,8 @@
 import datetime
+import json
 import pathlib
 import zipfile
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from typing import Any, NamedTuple, Optional, TypedDict, Union
 
 SomePath = Union[pathlib.Path, zipfile.Path]
@@ -30,26 +31,6 @@ class GroupInfo(TypedDict, total=False):
     members: list[UserInfo]
 
 
-# Converted group type
-class Group:
-    first_msg_time: Optional[datetime.datetime]
-    last_msg_time: Optional[datetime.datetime]
-
-    def __init__(self, json_group: GroupInfo, key: str):
-        super().__init__()
-        self.key = key
-        self.name = json_group.get("name", "DM")
-        self.members = {
-            m["email"].lower(): User(m) for m in json_group["members"]
-        }
-        self.count = 0
-        self.first_msg_time = None
-        self.last_msg_time = None
-
-        # Keyed by lowercase email
-        self.usercounts = defaultdict[str, int](int)
-
-
 # As in messages.json
 class MessageInfo(TypedDict, total=False):
     creator: UserInfo
@@ -76,6 +57,46 @@ class Message:
         except Exception:
             self.created_date = None
         self.text = json_msg.get("text", "")
+
+
+# Converted group type
+class Group:
+    first_msg_time: Optional[datetime.datetime]
+    last_msg_time: Optional[datetime.datetime]
+
+    def __init__(self, json_group: GroupInfo, key: str):
+        super().__init__()
+        self.key = key
+        self.name = json_group.get("name", "DM")
+        self.members = OrderedDict[str, User](
+            (m["email"].lower(), User(m)) for m in json_group["members"]
+        )
+        self.user_idxs = {
+            json_group["members"][i]["email"].lower(): i
+            for i in range(len(json_group["members"]))
+        }
+        self.count = 0
+        self.first_msg_time = None
+        self.last_msg_time = None
+
+        # Keyed by lowercase email
+        self.usercounts = defaultdict[str, int](int)
+
+    def load_messages(self, search_path: SomePath) -> list[Message]:
+        msgs_path = search_path / "Groups" / self.key / "messages.json"
+        if msgs_path.exists() and msgs_path.is_file():
+            with msgs_path.open("r", encoding="utf-8") as msgs_file:
+                msg_file: MessageFile = json.load(msgs_file)
+
+            msgs = [Message(m) for m in msg_file["messages"]]
+
+            if msgs:
+                self.first_msg_time = msgs[0].created_date
+                self.last_msg_time = msgs[-1].created_date
+
+            return msgs
+        else:
+            return []
 
 
 class SummaryData(NamedTuple):

@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 
 import argparse
+import functools
+import html
 import json
 import locale
 import logging
 import sys
 import zipfile
 from collections import defaultdict
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TextIO
 
-from util import Group, GroupInfo, Message, MessageFile, SomePath, SummaryData
+from util import Group, GroupInfo, SomePath, SummaryData, User
 
 
 def make_summary_data(
@@ -33,7 +37,7 @@ def make_summary_data(
             raise Exception(
                 f"Expected 'group_info.json' in {gd}; found {list(gd.iterdir())}"
             )
-        with info_path.open("r") as info_file:
+        with info_path.open("r", encoding="utf-8") as info_file:
             json_group: GroupInfo = json.load(info_file)
 
         group = Group(json_group, gd.name)
@@ -53,32 +57,22 @@ def make_summary_data(
         groups.append(group)
 
         # Scan messages
-        msgs_path = gd / "messages.json"
-        if msgs_path.exists() and msgs_path.is_file():
-            with msgs_path.open("r") as msgs_file:
-                msg_file: MessageFile = json.load(msgs_file)
+        msgs = group.load_messages(search_path)
+        for msg in msgs:
+            em = msg.creator.email.lower()
 
-            msgs = [Message(m) for m in msg_file["messages"]]
+            # Apply sender filter here
+            if sender_filter:
+                if em not in sender_filter:
+                    continue
 
-            if msgs:
-                group.first_msg_time = msgs[0].created_date
-                group.last_msg_time = msgs[-1].created_date
-
-            for msg in msgs:
-                em = msg.creator.email.lower()
-
-                # Apply sender filter here
-                if sender_filter:
-                    if em not in sender_filter:
-                        continue
-
-                if em not in group.members:
-                    # This seems to happen ... maybe this person has left the group?
-                    group.members[em] = msg.creator
-                    group.usercounts[em] = 0
-                group.usercounts[em] += 1
-                group.count += 1
-                usercounts[em] += 1
+            if em not in group.members:
+                # This seems to happen ... maybe this person has left the group?
+                group.members[em] = msg.creator
+                group.usercounts[em] = 0
+            group.usercounts[em] += 1
+            group.count += 1
+            usercounts[em] += 1
 
     return SummaryData(groups, usercounts)
 
@@ -109,6 +103,77 @@ def write_summary(data: SummaryData, outfile: TextIO) -> None:
     print("====== USERS ======", file=outfile)
     for em in usercounts:
         print(f" - {em}: {usercounts[em]} total messages", file=outfile)
+
+
+@contextmanager
+def htmlfile(path: Path) -> Generator[TextIO, None, None]:
+    f = path.open("w", encoding="utf-8")
+    try:
+        print("<!DOCTYPE html>", file=f)
+        print('<html lang="en">', file=f)
+        print("  <head>", file=f)
+        print('    <meta charset="utf-8">', file=f)
+        print('    <link rel="stylesheet" href="styles.css">', file=f)
+        print("  </head>", file=f)
+        print("  <body>", file=f)
+        print(file=f)
+        yield f
+    finally:
+        print(file=f)
+        print("  </body>", file=f)
+        print("</html>", file=f)
+        f.close()
+
+
+def username_html(u: User, g: Group) -> str:
+    return (
+        f'<span class="user{g.user_idxs.get(u.email, 0)}">'
+        + html.escape(u.email)
+        + "</span>"
+    )
+
+
+def write_html(
+    search_path: Path,
+    sender_filter: set[str],
+    outpath: Path,
+    summary: SummaryData,
+) -> None:
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    # First let's write each of the chats...
+    for i in range(len(summary.groups)):
+        group = summary.groups[i]
+        # Load up all the messages for the group
+        msgs = group.load_messages(search_path)
+
+        with htmlfile(outpath / f"g{i}.html") as ghtml:
+            gout = functools.partial(print, file=ghtml)
+
+            gout(f"<title>Chat: {html.escape(group.name)}</title>")
+            if group.first_msg_time:
+                gout(
+                    f"<p>From {html.escape(str(group.first_msg_time))} to {html.escape(str(group.last_msg_time))}"
+                )
+            gout("<h1>Members")
+
+            # Print members list
+            gout("<ul>")
+            for m in group.members.values():
+                gout("<li>")
+                gout(username_html(m, group))
+                gout(
+                    f"({html.escape(m.name)}): {group.usercounts[m.email.lower()]} messages"
+                )
+            gout("</ul>")
+
+            # Print basic read-out of the chat
+            # TODO: date links
+            gout("<h1>Messages")
+            for msg in msgs:
+                gout("<p>")
+                gout(username_html(msg.creator, group))
+                gout(f": html.escape({msg.text})")
 
 
 def get_search_path(in_path: Path) -> SomePath:
@@ -183,7 +248,7 @@ if __name__ == "__main__":
         raise Exception("not yet implemented")
     elif args.format == "summarize":
         if args.output:
-            outfile: TextIO = open(args.output, "w")
+            outfile: TextIO = open(args.output, "w", encoding="utf-8")
         else:
             outfile = sys.stdout
 
