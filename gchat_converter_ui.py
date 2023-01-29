@@ -3,11 +3,13 @@
 import io
 import locale
 import logging
+import shutil
 import tkinter  # type: ignore[import]
 import tkinter.filedialog  # type: ignore[import]
 import tkinter.messagebox  # type: ignore[import]
 import tkinter.scrolledtext  # type: ignore[import]
 import tkinter.ttk  # type: ignore[import]
+from contextlib import contextmanager
 from pathlib import Path
 
 import gchat_converter
@@ -42,41 +44,78 @@ def _cleanup_filter(filter_str: str) -> set[str]:
 
 
 def load():
+    global search_path
     search_path = gchat_converter.get_search_path(Path(inpath))
 
     strio = io.StringIO()
-    try:
-        for c in controls_to_disable:
-            c["state"] = "disabled"
+    with controls_disabled():
+        try:
+            global group_filter, sender_filter, summary_data
+            group_filter = _cleanup_filter(gfe_var.get())
+            sender_filter = _cleanup_filter(sfe_var.get())
+            summary_data = gchat_converter.make_summary_data(
+                search_path, gfch_var.get(), group_filter, sender_filter
+            )
+            gchat_converter.write_summary(summary_data, strio)
 
-        group_filter = _cleanup_filter(gfe_var.get())
-        sender_filter = _cleanup_filter(sfe_var.get())
+            # Now show relevant controls
+            gfe_label.grid(row=1, column=0)
+            gfe.grid(row=2, column=0, sticky="ew")
+            gfch.grid(row=3, column=0)
+            sfe_label.grid(row=4, column=0)
+            sfe.grid(row=5, column=0, sticky="ew")
+            reload_btn.grid(row=6, column=0)
+            generate_btn.grid(row=7, column=0)
 
-        summary_data = gchat_converter.make_summary_data(
-            search_path, gfch_var.get(), group_filter, sender_filter
+            t.grid(row=1, column=0)
+
+            try:
+                t["state"] = "normal"
+                t.replace("1.0", "end", strio.getvalue())
+            finally:
+                t["state"] = "disabled"
+
+        except Exception as e:
+            logging.exception("Error generating summary")
+            tkinter.messagebox.showerror(title="oops", message=str(e))
+
+
+def gen_html():
+    if "summary_data" not in globals():
+        tkinter.messagebox.showerror(
+            title="oops", message="Hmm, better generate summary first"
         )
-        gchat_converter.write_summary(summary_data, strio)
+        return
 
-        # Now show relevant controls
-        gfe_label.grid(row=1, column=0)
-        gfe.grid(row=2, column=0, sticky="ew")
-        gfch.grid(row=3, column=0)
-        sfe_label.grid(row=4, column=0)
-        sfe.grid(row=5, column=0, sticky="ew")
-        reload_btn.grid(row=6, column=0)
+    with controls_disabled():
+        try:
+            outpath = Path(
+                tkinter.filedialog.askdirectory(
+                    title="Make a folder for output (a new/empty one is good)",
+                    mustexist=False,
+                )
+            )
+            if not outpath:
+                return
 
-        t.grid(row=1, column=0)
+            if outpath.exists():
+                if outpath.is_file() or outpath.is_symlink():
+                    raise Exception("This seems to not be a folder")
 
-        t["state"] = "normal"
-        t.replace("1.0", "end", strio.getvalue())
-        t["state"] = "disabled"
+                if outpath.is_dir() and any(outpath.iterdir()):
+                    if tkinter.messagebox.askyesno(
+                        message="Do you want to delete existing files in this folder?"
+                    ):
+                        shutil.rmtree(outpath)
 
-    except Exception as e:
-        logging.exception("O HAI")
-        tkinter.messagebox.showerror(title="oops", message=str(e))
-    finally:
-        for c in controls_to_disable:
-            c["state"] = "normal"
+            gchat_converter.write_html(
+                search_path, sender_filter, outpath, summary_data
+            )
+            tkinter.messagebox.showinfo(message="Done!")
+
+        except Exception as e:
+            logging.exception("Error writing HTML")
+            tkinter.messagebox.showerror(title="oops", message=str(e))
 
 
 if __name__ == "__main__":
@@ -131,6 +170,20 @@ if __name__ == "__main__":
         topbar, text="Reload with new settings", command=load
     )
 
-    controls_to_disable = zb, fb, qb, gfe, gfch, sfe, reload_btn
+    generate_btn = tkinter.ttk.Button(
+        topbar, text="GENERATE HTML", command=gen_html
+    )
+
+    controls_to_disable = zb, fb, qb, gfe, gfch, sfe, reload_btn, generate_btn
+
+    @contextmanager
+    def controls_disabled():
+        for c in controls_to_disable:
+            c["state"] = "disabled"
+        try:
+            yield
+        finally:
+            for c in controls_to_disable:
+                c["state"] = "normal"
 
     root.mainloop()

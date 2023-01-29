@@ -241,16 +241,22 @@ def write_html(
     # Now write the index
     with htmlfile(outpath / "index.html") as ihtml:
         iout = functools.partial(print, file=ihtml)
-        iout('<h1>Chats</h1>')
-        iout('<ul>')
+        iout("<h1>Chats</h1>")
+        iout("<ul>")
         for i in range(len(summary.groups)):
             g = summary.groups[i]
-            iout(f'<li><a href="g{i}.html">' + html.escape(group.name) + '</a>')
-            iout('<ul>')
+            iout(f'<li><a href="g{i}.html">' + html.escape(group.name) + "</a>")
+            iout("<ul>")
             for m in g.members.values():
-                iout('<li>' + html.escape(m.email) + ' (' + html.escape(m.name) + ')</i>')
-            iout('</ul>')
-        iout('</ul>')
+                iout(
+                    "<li>"
+                    + html.escape(m.email)
+                    + " ("
+                    + html.escape(m.name)
+                    + ")</i>"
+                )
+            iout("</ul>")
+        iout("</ul>")
 
 
 def get_search_path(in_path: Path) -> SomePath:
