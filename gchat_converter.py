@@ -174,10 +174,16 @@ def write_html(
             months = set((m.created_date.year, m.created_date.month) for m in msgs if m.created_date)
             gout('<h2>Month Index</h2>')
             gout('<p>')
+            prev_year = None
             for month in months:
+                # One line per year...
+                if prev_year and month[0] != prev_year:
+                    gout('<br>')
+                prev_year = month[0]
+
                 gout(f'<a href="#{month[0]}-{month[1]}">')
                 gout(f'{month[0]}-{month[1]}')
-                gout('</a> ')
+                gout('</a>&centerdot;')
 
 
             # Print basic read-out of the chat
