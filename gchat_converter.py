@@ -245,7 +245,7 @@ def write_html(
         iout("<ul>")
         for i in range(len(summary.groups)):
             g = summary.groups[i]
-            iout(f'<li><a href="g{i}.html">' + html.escape(group.name) + "</a>")
+            iout(f'<li><a href="g{i}.html">' + html.escape(g.name) + "</a>")
             iout("<ul>")
             for m in g.members.values():
                 iout(
@@ -271,7 +271,7 @@ def get_search_path(in_path: Path) -> SomePath:
         raise Exception(f"Not sure what to do with {in_path}")
 
     # Descend into outer levels of the directory structure
-    if (in_path / "Takeout").exists():
+    if (search_path / "Takeout").exists():
         search_path = search_path / "Takeout"
     if (search_path / "Google Chat").exists():
         search_path = search_path / "Google Chat"
