@@ -91,7 +91,7 @@ def gen_html():
         try:
             outpath = Path(
                 tkinter.filedialog.askdirectory(
-                    title="Make a folder for output (a new/empty one is good)",
+                    title="Make a folder for output",
                     mustexist=False,
                 )
             )

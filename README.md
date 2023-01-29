@@ -1,6 +1,6 @@
-# takeout_gchat_converter
-Reads Google Chat data from Takeout and converts it to some hopefully useful format
+# takeout\_gchat\_converter
+Reads Google Chat data from Takeout and builds a little HTML browser for it.
 
-So far it just reads data and makes a summary. Next step is HTML output, then maybe TeX or something.
+Requires some recent version of Python3 (I'm using 3.10 for development right now), with tkinter for the UI part (that should be part of a standard Python distribution but some package managers make you install another package)
 
-Requires some recent version of Python3 (I'm using 3.10 for development right now), with tkinter for the UI part.
+To run, install Python, then download this program from the Code menu on this page. Just opening gchat\_converter\_ui.py should pop open a sort of ugly UI with all the relevant options.
