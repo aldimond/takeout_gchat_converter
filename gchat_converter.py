@@ -159,7 +159,7 @@ def write_html(
 ) -> None:
     outpath.mkdir(parents=True, exist_ok=True)
 
-    # First let's write each of the chats...
+    # First write all the chats
     for i in range(len(summary.groups)):
         group = summary.groups[i]
         # Load up all the messages for the group
@@ -205,7 +205,6 @@ def write_html(
                 gout("</a>&centerdot;")
 
             # Print basic read-out of the chat
-            # TODO: date links
             gout("<h1>Messages</h1>")
             prev_date: Optional[datetime.date] = None
             prev_month: Optional[tuple[int, int]] = None
@@ -238,6 +237,20 @@ def write_html(
                 if msg.has_annotations:
                     gout(" (message included images or other non-text data)")
                 gout("</span>")
+
+    # Now write the index
+    with htmlfile(outpath / "index.html") as ihtml:
+        iout = functools.partial(print, file=ihtml)
+        iout('<h1>Chats</h1>')
+        iout('<ul>')
+        for i in range(len(summary.groups)):
+            g = summary.groups[i]
+            iout(f'<li><a href="g{i}.html">' + html.escape(group.name) + '</a>')
+            iout('<ul>')
+            for m in g.members.values():
+                iout('<li>' + html.escape(m.email) + ' (' + html.escape(m.name) + ')</i>')
+            iout('</ul>')
+        iout('</ul>')
 
 
 def get_search_path(in_path: Path) -> SomePath:
