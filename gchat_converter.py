@@ -158,7 +158,6 @@ def write_html(
     summary: SummaryData,
 ) -> None:
     outpath.mkdir(parents=True, exist_ok=True)
-    shutil.copy(Path(__file__).parent / "styles.css", outpath)
 
     # First let's write each of the chats...
     for i in range(len(summary.groups)):
