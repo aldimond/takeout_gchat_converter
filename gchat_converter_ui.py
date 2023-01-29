@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import io
+import locale
 import logging
 import tkinter  # type: ignore[import]
 import tkinter.filedialog  # type: ignore[import]
@@ -79,6 +80,9 @@ def load():
 
 
 if __name__ == "__main__":
+    # Note comment on util.TIME_FORMAT
+    locale.setlocale(locale.LC_TIME, "en_US")
+
     root = tkinter.Tk()
     main_frame = tkinter.ttk.Frame(root, padding=10)
     main_frame.grid()

@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, TextIO
 
-from util import Group, GroupInfo, SomePath, SummaryData, User
+from util import USER_COLORS, Group, GroupInfo, SomePath, SummaryData, User
 
 
 def make_summary_data(
@@ -70,8 +70,7 @@ def make_summary_data(
 
             if em not in group.members:
                 # This seems to happen ... maybe this person has left the group?
-                group.members[em] = msg.creator
-                group.usercounts[em] = 0
+                group.add_member(msg.creator)
             group.usercounts[em] += 1
             group.count += 1
             usercounts[em] += 1
@@ -107,29 +106,46 @@ def write_summary(data: SummaryData, outfile: TextIO) -> None:
         print(f" - {em}: {usercounts[em]} total messages", file=outfile)
 
 
+def build_css() -> str:
+    result = ".details {\n"
+    result += "  font-size: 80%;\n"
+    result += "}\n\n"
+
+    for i in range(len(USER_COLORS)):
+        result += ".user" + str(i) + "{\n"
+        result += "  color: " + USER_COLORS[i] + ";\n"
+        result += "  font-weight: bold;\n"
+        result += "}\n\n"
+
+    return result
+
+
 @contextmanager
 def htmlfile(path: Path) -> Generator[TextIO, None, None]:
     f = path.open("w", encoding="utf-8")
     try:
-        print("<!DOCTYPE html>", file=f)
-        print('<html lang="en">', file=f)
-        print("  <head>", file=f)
-        print('    <meta charset="utf-8">', file=f)
-        print('    <link rel="stylesheet" href="styles.css">', file=f)
-        print("  </head>", file=f)
-        print("  <body>", file=f)
-        print(file=f)
+        p = functools.partial(print, file=f)
+        p("<!DOCTYPE html>")
+        p('<html lang="en">')
+        p("  <head>")
+        p('    <meta charset="utf-8">')
+        p("    <style>")
+        p(build_css())
+        p("    </style>")
+        p("  </head>")
+        p("  <body>")
+        p()
         yield f
     finally:
-        print(file=f)
-        print("  </body>", file=f)
-        print("</html>", file=f)
+        p()
+        p("  </body>")
+        p("</html>")
         f.close()
 
 
 def username_html(u: User, g: Group) -> str:
     return (
-        f'<span class="user{g.user_idxs.get(u.email, 0)%10}">'
+        f'<span class="user{g.get_idx(u)%len(USER_COLORS)}">'
         + html.escape(u.email)
         + "</span>"
     )
@@ -171,20 +187,23 @@ def write_html(
             gout("</ul>")
 
             # Find all months present
-            months = set((m.created_date.year, m.created_date.month) for m in msgs if m.created_date)
-            gout('<h2>Month Index</h2>')
-            gout('<p>')
+            months = set(
+                (m.created_date.year, m.created_date.month)
+                for m in msgs
+                if m.created_date
+            )
+            gout("<h2>Month Index</h2>")
+            gout("<p>")
             prev_year = None
             for month in months:
                 # One line per year...
                 if prev_year and month[0] != prev_year:
-                    gout('<br>')
+                    gout("<br>")
                 prev_year = month[0]
 
                 gout(f'<a href="#{month[0]}-{month[1]}">')
-                gout(f'{month[0]}-{month[1]}')
-                gout('</a>&centerdot;')
-
+                gout(f"{month[0]}-{month[1]}")
+                gout("</a>&centerdot;")
 
             # Print basic read-out of the chat
             # TODO: date links
@@ -200,24 +219,26 @@ def write_html(
                         if not prev_month or cur_month != prev_month:
                             gout(f'<h3 id="{cur_month[0]}-{cur_month[1]}">')
                             gout('<a href="#top">&uarr;</a>')
-                            gout(f'{cur_month[0]}-{cur_month[1]}')
-                            gout('</h3>')
-                        gout(f'<h4 id="{html.escape(str(cur_date), quote=True)}">')
+                            gout(f"{cur_month[0]}-{cur_month[1]}")
+                            gout("</h3>")
+                        gout(
+                            f'<h4 id="{html.escape(str(cur_date), quote=True)}">'
+                        )
                         gout(html.escape(str(cur_date)))
-                        gout('</h4>')
+                        gout("</h4>")
                     prev_date = cur_date
                     prev_month = cur_month
 
                 gout("<p>")
                 gout(username_html(msg.creator, group))
                 gout(": " + html.escape(msg.text))
-                gout('<br>')
+                gout("<br>")
                 gout('<span class="details">')
                 if msg.created_date:
                     gout(html.escape(msg.created_date.isoformat()))
                 if msg.has_annotations:
-                    gout(' (message included images or other non-text data)')
-                gout('</span>')
+                    gout(" (message included images or other non-text data)")
+                gout("</span>")
 
 
 def get_search_path(in_path: Path) -> SomePath:
@@ -241,7 +262,7 @@ def get_search_path(in_path: Path) -> SomePath:
 
 
 if __name__ == "__main__":
-    # We read in dates in US-ian locale
+    # Note comment on util.TIME_FORMAT
     locale.setlocale(locale.LC_TIME, "en_US")
 
     argparser = argparse.ArgumentParser(

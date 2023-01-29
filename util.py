@@ -7,8 +7,26 @@ from typing import Any, NamedTuple, Optional, TypedDict, Union
 
 SomePath = Union[pathlib.Path, zipfile.Path]
 
-# This should work for message dates as long as locale is set to en_US
+# This is, AFAICT, the date format used in GChat takeout. Locale must be set to
+# en_US for this to work because of weekdays and month names.
+#
+# This isn't a standard format and I don't fully trust that it won't change, so
+# I'm trying to be careful not to rely on parsing working.
 TIME_FORMAT = "%A, %B %d, %Y at %I:%M:%S %p %Z"
+
+# These are the colors used for a chat's users in the HTML output.
+USER_COLORS = (
+    "red",
+    "blue",
+    "green",
+    "orange",
+    "gold",
+    "magenta",
+    "darkseagreen",
+    "chocolate",
+    "steelblue",
+    "olive",
+)
 
 # Seen in various places
 class UserInfo(TypedDict):
@@ -83,6 +101,15 @@ class Group:
         # Keyed by lowercase email
         self.usercounts = defaultdict[str, int](int)
 
+    def add_member(self, u: User) -> None:
+        em = u.email.lower()
+        if em not in self.members:
+            self.members[em] = u
+            self.user_idxs[em] = len(self.members) - 1
+
+    def get_idx(self, u: User) -> int:
+        return self.user_idxs.get(u.email.lower(), 0)
+
     def load_messages(self, search_path: SomePath) -> list[Message]:
         msgs_path = search_path / "Groups" / self.key / "messages.json"
         if msgs_path.exists() and msgs_path.is_file():
@@ -103,4 +130,3 @@ class Group:
 class SummaryData(NamedTuple):
     groups: list[Group]
     usercounts: defaultdict[str, int]
-
